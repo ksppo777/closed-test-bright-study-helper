@@ -1,6 +1,6 @@
 import { Book, Chapter } from '../types';
 import { useState, useRef, useEffect, FormEvent } from 'react';
-import { Plus, Check, ChevronDown, ChevronUp, BookOpen, Trash2, X, Edit3, Copy } from 'lucide-react';
+import { Plus, Check, ChevronDown, ChevronUp, BookOpen, Trash2, X, Edit3, Copy, MoreVertical, Edit2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -33,6 +33,12 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   const [newChapterStart, setNewChapterStart] = useState('');
   const [newChapterEnd, setNewChapterEnd] = useState('');
 
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [editChapterTitle, setEditChapterTitle] = useState('');
+  const [editChapterStart, setEditChapterStart] = useState('');
+  const [editChapterEnd, setEditChapterEnd] = useState('');
+  const [chapterMenuOpenId, setChapterMenuOpenId] = useState<string | null>(null);
+
   const [confirmDeleteBookId, setConfirmDeleteBookId] = useState<string | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
@@ -41,6 +47,16 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
 
   const [newNotePage, setNewNotePage] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
+
+  const [editingBookmarkId, setEditingBookmarkId] = useState<string | null>(null);
+  const [editBmPage, setEditBmPage] = useState('');
+  const [editBmLabel, setEditBmLabel] = useState('');
+  const [bookmarkMenuOpenId, setBookmarkMenuOpenId] = useState<string | null>(null);
+
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNotePage, setEditNotePage] = useState('');
+  const [editNoteContent, setEditNoteContent] = useState('');
+  const [noteMenuOpenId, setNoteMenuOpenId] = useState<string | null>(null);
 
   // Auto Goal state
   const [editingAg, setEditingAg] = useState<{ bookId: string, goalId: string | 'NEW' } | null>(null);
@@ -230,6 +246,59 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
       }
       return book;
     }));
+  };
+
+  const handleSaveEditChapter = (bookId: string, chapterId: string, e: FormEvent) => {
+    e.preventDefault();
+    if (!editChapterTitle.trim() || !editChapterStart || !editChapterEnd) return;
+    const start = parseInt(editChapterStart, 10);
+    const end = parseInt(editChapterEnd, 10);
+    if (start > end) return alert('시작 페이지가 끝 페이지보다 클 수 없습니다.');
+
+    setBooks(prev => prev.map(book => {
+      if (book.id === bookId) {
+        return {
+          ...book,
+          chapters: (book.chapters || []).map(ch => ch.id === chapterId ? { ...ch, title: editChapterTitle, startPage: start, endPage: end } : ch)
+        };
+      }
+      return book;
+    }));
+    setEditingChapterId(null);
+  };
+
+  const handleSaveEditBookmark = (bookId: string, bmId: string, e: FormEvent) => {
+    e.preventDefault();
+    const page = parseInt(editBmPage, 10);
+    if (!page) return;
+
+    setBooks(prev => prev.map(book => {
+      if (book.id === bookId) {
+        return {
+          ...book,
+          bookmarks: (book.bookmarks || []).map(b => b.id === bmId ? { ...b, page, label: editBmLabel } : b).sort((a,b) => a.page - b.page)
+        };
+      }
+      return book;
+    }));
+    setEditingBookmarkId(null);
+  };
+
+  const handleSaveEditNote = (bookId: string, noteId: string, e: FormEvent) => {
+    e.preventDefault();
+    const page = parseInt(editNotePage, 10);
+    if (!page || !editNoteContent.trim()) return;
+
+    setBooks(prev => prev.map(book => {
+      if (book.id === bookId) {
+        return {
+          ...book,
+          notes: (book.notes || []).map(n => n.id === noteId ? { ...n, page, content: editNoteContent } : n).sort((a,b) => a.page - b.page)
+        };
+      }
+      return book;
+    }));
+    setEditingNoteId(null);
   };
 
   const deleteBookmark = (bookId: string, bmId: string) => {
@@ -603,21 +672,98 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                           ) : (
                             <ul className="space-y-3">
                               {book.chapters.map((chapter) => (
-                                <li key={chapter.id} className={cn("group flex items-center justify-between p-4 rounded-2xl transition-colors border", chapter.completed ? "bg-blue-50/50 dark:bg-slate-700/50 border-blue-100 dark:border-slate-600" : "bg-white dark:bg-slate-700 border-blue-100 dark:border-slate-600 hover:border-blue-300 dark:hover:border-slate-500 hover:shadow-md hover:shadow-blue-900/5")}>
-                                  <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => toggleChapterComplete(book.id, chapter.id)}>
-                                    <button className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shadow-sm shrink-0", chapter.completed ? theme.class + " border-transparent" : "border-blue-200 dark:border-slate-500 bg-white dark:bg-slate-800")}>
-                                      {chapter.completed && <Check className="w-4 h-4 text-white font-bold" />}
-                                    </button>
-                                    <div className="flex flex-col">
-                                      <span className={cn("font-bold transition-colors text-sm sm:text-base mb-1", chapter.completed ? "text-blue-300 dark:text-slate-500 line-through" : "text-blue-900 dark:text-slate-200")}>{chapter.title}</span>
-                                      <span className={cn("text-[10px] font-bold uppercase", chapter.completed ? "text-blue-200 dark:text-slate-600" : "text-blue-400 dark:text-slate-400")}>
-                                        P. {chapter.startPage} / {chapter.endPage} ({(chapter.endPage - chapter.startPage) + 1}p)
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <button onClick={() => deleteChapter(book.id, chapter.id)} className="opacity-0 group-hover:opacity-100 p-2 text-blue-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all ml-2 shrink-0">
-                                    <Trash2 className="w-5 h-5" />
-                                  </button>
+                                <li key={chapter.id} className={cn("group relative flex items-center justify-between p-4 rounded-2xl transition-colors border", chapter.completed ? "bg-blue-50/50 dark:bg-slate-700/50 border-blue-100 dark:border-slate-600" : "bg-white dark:bg-slate-700 border-blue-100 dark:border-slate-600 hover:border-blue-300 dark:hover:border-slate-500 hover:shadow-md hover:shadow-blue-900/5")}>
+                                  {editingChapterId === chapter.id ? (
+                                    <form onSubmit={(e) => handleSaveEditChapter(book.id, chapter.id, e)} className="w-full flex flex-col sm:flex-row gap-4 items-end">
+                                      <div className="flex-1 w-full relative">
+                                        <input
+                                          type="text"
+                                          value={editChapterTitle}
+                                          onChange={(e) => setEditChapterTitle(e.target.value)}
+                                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                          required
+                                        />
+                                      </div>
+                                      <div className="flex gap-4 w-full sm:w-auto">
+                                        <div className="w-1/2 sm:w-20">
+                                          <input
+                                            type="number"
+                                            value={editChapterStart}
+                                            onChange={(e) => setEditChapterStart(e.target.value)}
+                                            min="1"
+                                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                            required
+                                          />
+                                        </div>
+                                        <div className="w-1/2 sm:w-20">
+                                          <input
+                                            type="number"
+                                            value={editChapterEnd}
+                                            onChange={(e) => setEditChapterEnd(e.target.value)}
+                                            min="1"
+                                            className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                            required
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">저장</button>
+                                        <button type="button" onClick={() => setEditingChapterId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">취소</button>
+                                      </div>
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center gap-4 flex-1 cursor-pointer pr-8" onClick={() => toggleChapterComplete(book.id, chapter.id)}>
+                                        <button className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shadow-sm shrink-0", chapter.completed ? theme.class + " border-transparent" : "border-blue-200 dark:border-slate-500 bg-white dark:bg-slate-800")}>
+                                          {chapter.completed && <Check className="w-4 h-4 text-white font-bold" />}
+                                        </button>
+                                        <div className="flex flex-col">
+                                          <span className={cn("font-bold transition-colors text-sm sm:text-base mb-1", chapter.completed ? "text-blue-300 dark:text-slate-500 line-through" : "text-blue-900 dark:text-slate-200")}>{chapter.title}</span>
+                                          <span className={cn("text-[10px] font-bold uppercase", chapter.completed ? "text-blue-200 dark:text-slate-600" : "text-blue-400 dark:text-slate-400")}>
+                                            P. {chapter.startPage} / {chapter.endPage} ({(chapter.endPage - chapter.startPage) + 1}p)
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="relative shrink-0">
+                                        <button onClick={() => setChapterMenuOpenId(chapterMenuOpenId === chapter.id ? null : chapter.id)} className="p-2 text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 transition-all rounded-md">
+                                          <MoreVertical className="w-5 h-5" />
+                                        </button>
+                                        <AnimatePresence>
+                                          {chapterMenuOpenId === chapter.id && (
+                                            <motion.div
+                                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              transition={{ duration: 0.15 }}
+                                              className="absolute right-0 top-10 mt-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-1 z-10"
+                                            >
+                                              <button
+                                                onClick={() => {
+                                                  setEditingChapterId(chapter.id);
+                                                  setEditChapterTitle(chapter.title);
+                                                  setEditChapterStart(chapter.startPage.toString());
+                                                  setEditChapterEnd(chapter.endPage.toString());
+                                                  setChapterMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
+                                              >
+                                                <Edit2 className="w-4 h-4" /> 수정
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  deleteChapter(book.id, chapter.id);
+                                                  setChapterMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                              >
+                                                <Trash2 className="w-4 h-4" /> 삭제
+                                              </button>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    </>
+                                  )}
                                 </li>
                               ))}
                             </ul>
@@ -644,16 +790,80 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                           {(!book.bookmarks || book.bookmarks.length === 0) ? (
                             <div className="text-center py-8 text-sm font-medium text-blue-300">저장된 책갈피가 없습니다.</div>
                           ) : (
-                            <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               {book.bookmarks.map(bm => (
-                                <li key={bm.id} className="group bg-white dark:bg-slate-700 border border-blue-100 dark:border-slate-600 rounded-xl p-3 flex justify-between items-center shadow-sm hover:border-blue-300 dark:hover:border-slate-500 hover:shadow-md transition-all">
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">P. {bm.page}</span>
-                                    {bm.label && <span className="text-xs font-medium text-blue-900 dark:text-slate-300 truncate">{bm.label}</span>}
-                                  </div>
-                                  <button onClick={() => deleteBookmark(book.id, bm.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-blue-300 dark:text-slate-500 hover:text-red-500 rounded-lg transition-all ml-1 shrink-0">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                <li key={bm.id} className={cn("group relative bg-white dark:bg-slate-700 border border-blue-100 dark:border-slate-600 rounded-xl p-3 flex justify-between items-center shadow-sm hover:border-blue-300 dark:hover:border-slate-500 hover:shadow-md transition-all", editingBookmarkId === bm.id ? "col-span-full sm:col-span-full" : "")}>
+                                  {editingBookmarkId === bm.id ? (
+                                    <form onSubmit={(e) => handleSaveEditBookmark(book.id, bm.id, e)} className="w-full flex flex-col sm:flex-row gap-4 items-end">
+                                      <div className="w-full sm:w-24 relative">
+                                        <input
+                                          type="number"
+                                          value={editBmPage}
+                                          onChange={(e) => setEditBmPage(e.target.value)}
+                                          min="1"
+                                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                          required
+                                        />
+                                      </div>
+                                      <div className="flex-1 w-full relative">
+                                        <input
+                                          type="text"
+                                          value={editBmLabel}
+                                          onChange={(e) => setEditBmLabel(e.target.value)}
+                                          placeholder="예: 중요한 공식"
+                                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                        />
+                                      </div>
+                                      <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">저장</button>
+                                        <button type="button" onClick={() => setEditingBookmarkId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">취소</button>
+                                      </div>
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <div className="flex flex-col pr-8">
+                                        <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">P. {bm.page}</span>
+                                        {bm.label && <span className="text-xs font-medium text-blue-900 dark:text-slate-300 truncate">{bm.label}</span>}
+                                      </div>
+                                      <div className="relative shrink-0">
+                                        <button onClick={() => setBookmarkMenuOpenId(bookmarkMenuOpenId === bm.id ? null : bm.id)} className="p-2 text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 transition-all rounded-md">
+                                          <MoreVertical className="w-4 h-4" />
+                                        </button>
+                                        <AnimatePresence>
+                                          {bookmarkMenuOpenId === bm.id && (
+                                            <motion.div
+                                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              transition={{ duration: 0.15 }}
+                                              className="absolute right-0 top-10 mt-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-1 z-10"
+                                            >
+                                              <button
+                                                onClick={() => {
+                                                  setEditingBookmarkId(bm.id);
+                                                  setEditBmPage(bm.page.toString());
+                                                  setEditBmLabel(bm.label || '');
+                                                  setBookmarkMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
+                                              >
+                                                <Edit2 className="w-4 h-4" /> 수정
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  deleteBookmark(book.id, bm.id);
+                                                  setBookmarkMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                              >
+                                                <Trash2 className="w-4 h-4" /> 삭제
+                                              </button>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    </>
+                                  )}
                                 </li>
                               ))}
                             </ul>
@@ -682,15 +892,80 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                           ) : (
                             <ul className="space-y-3">
                               {book.notes.map(note => (
-                                <li key={note.id} className="group bg-white dark:bg-slate-800 border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50/30 dark:bg-yellow-900/10 rounded-xl p-4 flex flex-col shadow-sm hover:shadow-md transition-all">
-                                  <div className="flex justify-between items-start mb-2">
-                                    <span className="font-bold text-yellow-700 dark:text-yellow-500 text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-900/50 rounded-md">Page {note.page}</span>
-                                    <button onClick={() => deleteNote(book.id, note.id)} className="opacity-0 group-hover:opacity-100 p-1 text-yellow-600 dark:text-yellow-700 hover:text-red-500 rounded-lg transition-all ml-1 shrink-0">
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                  <p className="text-sm font-medium text-blue-900 dark:text-slate-200 whitespace-pre-wrap">{note.content}</p>
-                                  <span className="text-[10px] font-bold text-blue-300 dark:text-slate-500 mt-2 text-right">{new Date(note.createdAt).toLocaleDateString()}</span>
+                                <li key={note.id} className="group relative bg-white dark:bg-slate-800 border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50/30 dark:bg-yellow-900/10 rounded-xl p-4 flex flex-col shadow-sm hover:shadow-md transition-all">
+                                  {editingNoteId === note.id ? (
+                                    <form onSubmit={(e) => handleSaveEditNote(book.id, note.id, e)} className="w-full flex flex-col sm:flex-row gap-4 items-end">
+                                      <div className="w-full sm:w-24 relative">
+                                        <input
+                                          type="number"
+                                          value={editNotePage}
+                                          onChange={(e) => setEditNotePage(e.target.value)}
+                                          min="1"
+                                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-yellow-200 dark:border-yellow-900/50 rounded-xl text-sm font-bold text-yellow-700 dark:text-yellow-500 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
+                                          required
+                                        />
+                                      </div>
+                                      <div className="flex-1 w-full relative">
+                                        <input
+                                          type="text"
+                                          value={editNoteContent}
+                                          onChange={(e) => setEditNoteContent(e.target.value)}
+                                          placeholder="학습 내용을 기록하세요..."
+                                          className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-yellow-200 dark:border-yellow-900/50 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
+                                          required
+                                        />
+                                      </div>
+                                      <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                        <button type="submit" className="bg-yellow-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-700 transition-colors">저장</button>
+                                        <button type="button" onClick={() => setEditingNoteId(null)} className="text-yellow-600 dark:text-yellow-500 px-3 py-2 text-sm font-bold hover:text-yellow-700 transition-colors">취소</button>
+                                      </div>
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <div className="flex justify-between items-start mb-2 group-hover:pr-8 transition-all">
+                                        <span className="font-bold text-yellow-700 dark:text-yellow-500 text-xs px-2 py-1 bg-yellow-100 dark:bg-yellow-900/50 rounded-md">Page {note.page}</span>
+                                      </div>
+                                      <p className="text-sm font-medium text-blue-900 dark:text-slate-200 whitespace-pre-wrap">{note.content}</p>
+                                      <span className="text-[10px] font-bold text-blue-300 dark:text-slate-500 mt-2 text-right">{new Date(note.createdAt).toLocaleDateString()}</span>
+                                      <div className="absolute top-2 right-2">
+                                        <button onClick={() => setNoteMenuOpenId(noteMenuOpenId === note.id ? null : note.id)} className="p-2 text-yellow-600 dark:text-yellow-700 hover:text-yellow-800 dark:hover:text-yellow-500 transition-all rounded-md">
+                                          <MoreVertical className="w-4 h-4" />
+                                        </button>
+                                        <AnimatePresence>
+                                          {noteMenuOpenId === note.id && (
+                                            <motion.div
+                                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                              transition={{ duration: 0.15 }}
+                                              className="absolute right-0 top-10 mt-1 w-32 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-1 z-10"
+                                            >
+                                              <button
+                                                onClick={() => {
+                                                  setEditingNoteId(note.id);
+                                                  setEditNotePage(note.page.toString());
+                                                  setEditNoteContent(note.content);
+                                                  setNoteMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
+                                              >
+                                                <Edit2 className="w-4 h-4" /> 수정
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  deleteNote(book.id, note.id);
+                                                  setNoteMenuOpenId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                              >
+                                                <Trash2 className="w-4 h-4" /> 삭제
+                                              </button>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    </>
+                                  )}
                                 </li>
                               ))}
                             </ul>
