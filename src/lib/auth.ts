@@ -33,9 +33,7 @@ export const googleSignIn = async (): Promise<{ user: User } | null> => {
     isSigningIn = true;
 
     if (Capacitor.isNativePlatform()) {
-      const nativeResult = await FirebaseAuthentication.signInWithGoogle({
-        useCredentialManager: false
-      });
+      const nativeResult = await FirebaseAuthentication.signInWithGoogle();
 
       if (!nativeResult.credential?.idToken) {
         throw new Error('Failed to get ID token from native Google Sign-In');
