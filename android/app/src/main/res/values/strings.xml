@@ -4,5 +4,5 @@
     <string name="title_activity_main">Bright Study</string>
     <string name="package_name">com.brightstudy.app</string>
     <string name="custom_url_scheme">com.brightstudy.app</string>
-    <string name="server_client_id">926621621039-b6idpq9gvm3h1gn5ltb2p609pf401aaf.apps.googleusercontent.com</string>
+    <string name="default_web_client_id">926621621039-b6idpq9gvm3h1gn5ltb2p609pf401aaf.apps.googleusercontent.com</string>
 </resources>
