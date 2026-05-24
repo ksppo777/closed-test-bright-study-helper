@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { initAuth, googleSignIn, logout, getAccessToken } from '../lib/auth';
-import { syncDataToDrive, syncDataFromDrive } from '../lib/driveSync';
+import { initAuth, googleSignIn, logout } from '../lib/auth';
+import { syncDataToCloud, syncDataFromCloud } from '../lib/cloudSync';
 import { User } from 'firebase/auth';
 import { Cloud, Check, Download, Upload, LogOut, Moon, Sun, Target, MessageCircle, Type, AlignLeft } from 'lucide-react';
 import { clearStorage, setStorage } from '../lib/storage';
@@ -29,7 +29,7 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
 
   useEffect(() => {
     const unsubscribe = initAuth(
-      (u, _) => setUser(u),
+      (u) => setUser(u),
       () => setUser(null)
     );
     return () => unsubscribe();
@@ -48,36 +48,36 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
   };
 
   const handleUpload = async () => {
-    if (!confirm('현재 기기의 데이터로 구글 드라이브 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
+    if (!confirm('현재 기기의 데이터를 클라우드에 백업합니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('업로드 중...');
+    setSyncStatus('동기화 중...');
     try {
       const data = getAllData();
-      await syncDataToDrive(data);
-      setSyncStatus('업로드 완료!');
+      await syncDataToCloud(data);
+      setSyncStatus('백업 완료!');
       setTimeout(() => setSyncStatus(null), 3000);
     } catch (e) {
-      setSyncStatus('업로드 실패');
+      setSyncStatus('백업 실패');
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleDownload = async () => {
-    if (!confirm('구글 드라이브의 데이터로 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
+    if (!confirm('클라우드에 저장된 데이터로 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('다운로드 중...');
+    setSyncStatus('동기화 중...');
     try {
-      const data = await syncDataFromDrive();
+      const data = await syncDataFromCloud();
       if (data) {
         onDataSync(data);
-        setSyncStatus('다운로드 완료!');
+        setSyncStatus('복원 완료!');
       } else {
-        setSyncStatus('저장된 데이터가 없습니다.');
+        setSyncStatus('저장된 백업이 없습니다.');
       }
       setTimeout(() => setSyncStatus(null), 3000);
     } catch (e) {
-      setSyncStatus('다운로드 실패');
+      setSyncStatus('복원 실패');
     } finally {
       setIsSyncing(false);
     }
@@ -299,14 +299,14 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold transition-colors"
                >
-                <Upload className="w-5 h-5" /> 현재 기기 데이터를 구글 드라이브에 백업
+                <Upload className="w-5 h-5" /> 현재 기기 데이터를 클라우드에 백업
               </button>
               <button 
                 onClick={handleDownload} 
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl font-bold transition-colors"
               >
-                <Download className="w-5 h-5" /> 구글 드라이브에서 데이터 불러오기
+                <Download className="w-5 h-5" /> 클라우드에서 데이터 가져오기
               </button>
             </div>
             {syncStatus && <p className="text-center font-bold text-sm text-blue-600 dark:text-blue-400">{syncStatus}</p>}
@@ -362,7 +362,7 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
             <div>
               <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-2">정말 모든 데이터를 삭제하겠습니까?</h3>
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                삭제된 데이터는 복구할 수 없습니다. (단, 구글 드라이브에 시점 백업을 해둔 경우 추후 다운로드로 복구 가능합니다.)
+                삭제된 데이터는 복구할 수 없습니다. (단, 클라우드에 백업을 해둔 경우 추후 다운로드로 복구 가능합니다.)
               </p>
             </div>
             
