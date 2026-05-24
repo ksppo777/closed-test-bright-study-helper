@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { initAuth, googleSignIn, logout } from '../lib/auth';
-import { syncDataToCloud, syncDataFromCloud } from '../lib/cloudSync';
+import { CloudBackupSnapshot, deleteCloudBackupSnapshot, getCloudBackupSnapshots, getCloudSyncErrorMessage, restoreCloudBackupSnapshot, syncDataToCloud, syncDataFromCloud } from '../lib/cloudSync';
 import { User } from 'firebase/auth';
-import { Cloud, Check, Download, Upload, LogOut, Moon, Sun, Target, MessageCircle, Type, AlignLeft } from 'lucide-react';
+import { Cloud, Check, Download, Upload, LogOut, Moon, Sun, Target, MessageCircle, Type, AlignLeft, RotateCcw, Trash2 } from 'lucide-react';
 import { clearStorage, setStorage } from '../lib/storage';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -20,12 +20,21 @@ interface SettingsProps {
   setPreventWordWrap: (val: boolean) => void;
   showNavLabelsMobile: boolean;
   setShowNavLabelsMobile: (val: boolean) => void;
+  autoBackupStatus: string;
+  lastAutoBackupAt: string | null;
 }
 
-export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAllData, autoGoalDisplayMode, setAutoGoalDisplayMode, globalFontSize, setGlobalFontSize, preventWordWrap, setPreventWordWrap, showNavLabelsMobile, setShowNavLabelsMobile }: SettingsProps) {
+export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAllData, autoGoalDisplayMode, setAutoGoalDisplayMode, globalFontSize, setGlobalFontSize, preventWordWrap, setPreventWordWrap, showNavLabelsMobile, setShowNavLabelsMobile, autoBackupStatus, lastAutoBackupAt }: SettingsProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [backupSnapshots, setBackupSnapshots] = useState<CloudBackupSnapshot[]>([]);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
+
+  const showTemporaryStatus = (message: string, duration = 4000) => {
+    setSyncStatus(message);
+    window.setTimeout(() => setSyncStatus(null), duration);
+  };
 
   useEffect(() => {
     const unsubscribe = initAuth(
@@ -34,6 +43,27 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
     );
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const loadSnapshots = async () => {
+      if (!user) {
+        setBackupSnapshots([]);
+        return;
+      }
+
+      setIsLoadingSnapshots(true);
+      try {
+        const snapshots = await getCloudBackupSnapshots();
+        setBackupSnapshots(snapshots);
+      } catch (error) {
+        showTemporaryStatus(`백업 목록 불러오기 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
+      } finally {
+        setIsLoadingSnapshots(false);
+      }
+    };
+
+    loadSnapshots();
+  }, [user]);
 
   const handleLogin = async () => {
     try {
@@ -50,14 +80,15 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
   const handleUpload = async () => {
     if (!confirm('현재 기기의 데이터를 클라우드에 백업합니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('동기화 중...');
+    setSyncStatus('Firebase에 백업 중...');
     try {
       const data = getAllData();
-      await syncDataToCloud(data);
-      setSyncStatus('백업 완료!');
-      setTimeout(() => setSyncStatus(null), 3000);
+      await syncDataToCloud(data, 'manual');
+      const snapshots = await getCloudBackupSnapshots();
+      setBackupSnapshots(snapshots);
+      showTemporaryStatus('Firebase 백업 완료!');
     } catch (e) {
-      setSyncStatus('백업 실패');
+      showTemporaryStatus(`백업 실패: ${getCloudSyncErrorMessage(e)}`, 6000);
     } finally {
       setIsSyncing(false);
     }
@@ -66,18 +97,53 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
   const handleDownload = async () => {
     if (!confirm('클라우드에 저장된 데이터로 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('동기화 중...');
+    setSyncStatus('Firebase에서 불러오는 중...');
     try {
       const data = await syncDataFromCloud();
       if (data) {
         onDataSync(data);
-        setSyncStatus('복원 완료!');
+        showTemporaryStatus('Firebase 복원 완료!');
       } else {
-        setSyncStatus('저장된 백업이 없습니다.');
+        showTemporaryStatus('저장된 Firebase 백업이 없습니다.');
       }
-      setTimeout(() => setSyncStatus(null), 3000);
     } catch (e) {
-      setSyncStatus('복원 실패');
+      showTemporaryStatus(`복원 실패: ${getCloudSyncErrorMessage(e)}`, 6000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (snapshotId: string) => {
+    if (!confirm('선택한 백업으로 현재 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
+
+    setIsSyncing(true);
+    setSyncStatus('선택한 백업을 복원하는 중...');
+    try {
+      const data = await restoreCloudBackupSnapshot(snapshotId);
+      if (data) {
+        onDataSync(data);
+        showTemporaryStatus('선택한 백업으로 복원 완료!');
+      } else {
+        showTemporaryStatus('선택한 백업에 데이터가 없습니다.');
+      }
+    } catch (error) {
+      showTemporaryStatus(`선택 백업 복원 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDeleteSnapshot = async (snapshotId: string) => {
+    if (!confirm('선택한 백업 스냅샷을 삭제합니다. 진행하시겠습니까?')) return;
+
+    setIsSyncing(true);
+    setSyncStatus('백업 스냅샷을 삭제하는 중...');
+    try {
+      await deleteCloudBackupSnapshot(snapshotId);
+      setBackupSnapshots((prev: CloudBackupSnapshot[]) => prev.filter((snapshot: CloudBackupSnapshot) => snapshot.id !== snapshotId));
+      showTemporaryStatus('백업 스냅샷 삭제 완료!');
+    } catch (error) {
+      showTemporaryStatus(`백업 스냅샷 삭제 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
     } finally {
       setIsSyncing(false);
     }
@@ -254,14 +320,14 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
             <Cloud className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-blue-900 dark:text-white">클라우드 동기화 (Google Drive)</h3>
-            <p className="text-sm font-medium text-blue-400 dark:text-slate-400">여러 기기에서 학습 기록을 이어가세요.</p>
+            <h3 className="text-xl font-bold text-blue-900 dark:text-white">클라우드 동기화 (Firebase)</h3>
+            <p className="text-sm font-medium text-blue-400 dark:text-slate-400">Firestore에 학습 기록을 저장하고 여러 기기에서 이어가세요.</p>
           </div>
         </div>
 
         {!user ? (
           <div className="flex flex-col items-center justify-center py-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 text-center">Google 계정에 로그인하여 데이터를 안전하게 보관하세요.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 text-center">Google 계정으로 로그인한 뒤 Firebase 클라우드에 데이터를 안전하게 보관하세요.</p>
             <button className="gsi-material-button" onClick={handleLogin}>
               <div className="gsi-material-button-state"></div>
               <div className="gsi-material-button-content-wrapper">
@@ -299,15 +365,68 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold transition-colors"
                >
-                <Upload className="w-5 h-5" /> 현재 기기 데이터를 클라우드에 백업
+                <Upload className="w-5 h-5" /> 현재 기기 데이터를 Firebase에 백업
               </button>
               <button 
                 onClick={handleDownload} 
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl font-bold transition-colors"
               >
-                <Download className="w-5 h-5" /> 클라우드에서 데이터 가져오기
+                <Download className="w-5 h-5" /> Firebase에서 데이터 가져오기
               </button>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">자동 백업 상태</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{autoBackupStatus}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                최근 자동 백업: {lastAutoBackupAt ? new Date(lastAutoBackupAt).toLocaleString('ko-KR') : '아직 없음'}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                자동 백업은 최신본을 유지하면서 스냅샷 여러 개를 남겨 실수 삭제 후에도 이전 상태로 복원할 수 있습니다.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">복원 가능한 백업 기록</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">수동 백업과 자동 백업 스냅샷을 모두 확인할 수 있습니다.</p>
+                </div>
+                {isLoadingSnapshots && <p className="text-xs text-slate-500 dark:text-slate-400">불러오는 중...</p>}
+              </div>
+              {backupSnapshots.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">아직 저장된 백업 기록이 없습니다.</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {backupSnapshots.map((snapshot) => (
+                    <div key={snapshot.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                          {snapshot.source === 'manual' ? '수동 백업' : '자동 백업'}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString('ko-KR') : '시간 정보 없음'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleRestoreSnapshot(snapshot.id)}
+                          disabled={isSyncing}
+                          className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-300"
+                        >
+                          <RotateCcw className="w-4 h-4" /> 복원
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSnapshot(snapshot.id)}
+                          disabled={isSyncing}
+                          className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:bg-red-300"
+                        >
+                          <Trash2 className="w-4 h-4" /> 삭제
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             {syncStatus && <p className="text-center font-bold text-sm text-blue-600 dark:text-blue-400">{syncStatus}</p>}
           </div>

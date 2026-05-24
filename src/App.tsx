@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocalStorage } from './lib/utils';
 import { Book, StudySession, StudyAlarm } from './types';
 import BookManager from './components/BookManager';
@@ -13,6 +13,9 @@ import { Book as BookIcon, Timer, LineChart, Sparkles, Settings as SettingsIcon,
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { differenceInDays, parseISO } from 'date-fns';
+import { getCloudSyncErrorMessage, syncDataToCloud } from './lib/cloudSync';
+
+const AUTO_CLOUD_BACKUP_DEBOUNCE_MS = 8000;
 
 export default function App() {
   const [books, setBooks, isBooksLoaded] = useLocalStorage<Book[]>('study-helper-books', []);
@@ -31,10 +34,22 @@ export default function App() {
   const [preventWordWrap, setPreventWordWrap, isWordWrapLoaded] = useLocalStorage<boolean>('study-helper-word-wrap', false);
   const [showNavLabelsMobile, setShowNavLabelsMobile, isNavLabelsLoaded] = useLocalStorage<boolean>('study-helper-nav-labels', false);
   const [dDaySize, setDDaySize, isDDaySizeLoaded] = useLocalStorage<number>('study-helper-dday-size', 30);
+  const [lastAutoBackupAt, setLastAutoBackupAt] = useState<string | null>(null);
+  const [autoBackupStatus, setAutoBackupStatus] = useState<string>('자동 백업 대기 중');
 
   const isAllLoaded = isBooksLoaded && isSessionsLoaded && isAlarmsLoaded && isWeeklyPlansLoaded && 
                       isMonthlyPlansLoaded && isDailyGoalLoaded && isDarkLoaded && isAutoGoalLoaded && 
                       isDDayLoaded && isFontSizeLoaded && isWordWrapLoaded && isNavLabelsLoaded && isDDaySizeLoaded;
+
+  const cloudSyncPayload = useMemo(() => ({
+    books,
+    sessions,
+    alarms,
+    isDarkMode,
+  }), [books, sessions, alarms, isDarkMode]);
+
+  const autoBackupEnabledRef = useRef(false);
+  const autoBackupTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isAllLoaded) return;
@@ -249,12 +264,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [alarms, books]);
 
-  const getAllData = () => ({
-    books,
-    sessions,
-    alarms,
-    isDarkMode
-  });
+  const getAllData = () => cloudSyncPayload;
 
   const onDataSync = (data: any) => {
     if (data.books) setBooks(data.books);
@@ -262,6 +272,43 @@ export default function App() {
     if (data.alarms) setAlarms(data.alarms);
     if (data.isDarkMode !== undefined) setIsDarkMode(data.isDarkMode);
   };
+
+  useEffect(() => {
+    if (!isAllLoaded) {
+      return;
+    }
+
+    if (!autoBackupEnabledRef.current) {
+      autoBackupEnabledRef.current = true;
+      setAutoBackupStatus('자동 백업 준비 완료');
+      return;
+    }
+
+    setAutoBackupStatus('변경 감지됨 · 자동 백업 예약 중');
+
+    if (autoBackupTimerRef.current) {
+      window.clearTimeout(autoBackupTimerRef.current);
+    }
+
+    autoBackupTimerRef.current = window.setTimeout(async () => {
+      try {
+        setAutoBackupStatus('자동 백업 실행 중...');
+        await syncDataToCloud(cloudSyncPayload, 'auto');
+        const backupTime = new Date().toISOString();
+        setLastAutoBackupAt(backupTime);
+        setAutoBackupStatus('자동 백업 완료');
+      } catch (error) {
+        setAutoBackupStatus(`자동 백업 실패: ${getCloudSyncErrorMessage(error)}`);
+      }
+    }, AUTO_CLOUD_BACKUP_DEBOUNCE_MS);
+
+    return () => {
+      if (autoBackupTimerRef.current) {
+        window.clearTimeout(autoBackupTimerRef.current);
+        autoBackupTimerRef.current = null;
+      }
+    };
+  }, [cloudSyncPayload, isAllLoaded]);
 
   const navItems = [
     { id: 'home', label: '홈', icon: HomeIcon },
@@ -439,6 +486,8 @@ export default function App() {
                 setPreventWordWrap={setPreventWordWrap}
                 showNavLabelsMobile={showNavLabelsMobile}
                 setShowNavLabelsMobile={setShowNavLabelsMobile}
+                autoBackupStatus={autoBackupStatus}
+                lastAutoBackupAt={lastAutoBackupAt}
               />
             )}
           </motion.div>

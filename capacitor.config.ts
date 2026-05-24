@@ -5,6 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Bright Study',
   webDir: 'dist',                // 💡 여기에 쉼표(,)를 꼭 찍어주세요!
   plugins: {
+    CapacitorHttp: {
+      enabled: false
+    },
     FirebaseAuthentication: {
       skipNativeAuth: false,
       providers: ["google.com"]
